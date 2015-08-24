@@ -31,7 +31,6 @@ sdl_visual_inquire(void *        vis,
   DEBUG3("sdl_visual_inquire exited\n");
 }
 
-
 int
 sdl_visual_get_pixel (VWKREF vwk,
 		      int    x,
@@ -41,36 +40,35 @@ sdl_visual_get_pixel (VWKREF vwk,
   return 0;
 }
 
-
-void
-sdl_visual_put_pixel(VWKREF vwk,
-                     int    x,
-                     int    y,
-                     int    c)
+/* internal */
+int
+sdl_visual_lock(SDL_Surface *screen)
 {
-  Uint32        color;
-  SDL_Surface * screen;
-
-  DEBUG3("sdl_visual_put_pixel entered\n");
-  
-  screen = VISUAL_T(vwk->visual->private);
-
-  /* printf("c = %d ", c);*/
-  color = PENS(vwk->visual->private)[c];
-  /*  printf("color = 0x%x\n", color);*/
-
   if(SDL_MUSTLOCK(screen))
   {
     if(SDL_LockSurface(screen) < 0)
     {
-      return;
+      return -1;
     }
   }
+  
+  return 0;
+}
 
-  if( WRITE_MODE(vwk->visual->private) == MD_XOR ) {
-    printf("bpp = %d\n", screen->format->BytesPerPixel);
+/* internal */
+void
+sdl_visual_unlock(SDL_Surface *screen)
+{
+  if(SDL_MUSTLOCK(screen))
+  {
+    SDL_UnlockSurface(screen);
   }
+}
 
+/* internal */
+void
+sdl_visual_internal_put_pixel(SDL_Surface *screen, int x, int y, Uint32 color)
+{
   switch(screen->format->BytesPerPixel)
   {
   case 1: /* Assuming 8-bpp */
@@ -120,28 +118,75 @@ sdl_visual_put_pixel(VWKREF vwk,
   }
   break;
   }
+}
 
-  if(SDL_MUSTLOCK(screen))
-  {
-    SDL_UnlockSurface(screen);
+void
+sdl_visual_put_pixel(VWKREF vwk,
+                     int    x,
+                     int    y,
+                     int    c)
+{
+  Uint32        color;
+  SDL_Surface * screen;
+
+  DEBUG3("sdl_visual_put_pixel entered\n");
+  
+  screen = VISUAL_T(vwk->visual->private);
+
+  /* printf("c = %d ", c);*/
+  color = PENS(vwk->visual->private)[c];
+  /*  printf("color = 0x%x\n", color);*/
+
+  if (sdl_visual_lock(screen))
+    return;
+  
+  if( WRITE_MODE(vwk->visual->private) == MD_XOR ) {
+    printf("bpp = %d\n", screen->format->BytesPerPixel);
   }
+  
+  sdl_visual_internal_put_pixel(screen, x, y, color);
+
+  sdl_visual_unlock(screen);
 
   SDL_UpdateRect(screen, x, y, 1, 1);
   DEBUG3("sdl_visual_put_pixel exited\n");
 }
 
 
-/* FIXME: Optimize */
 void sdl_visual_put_pixels( VWKREF vwk, int n,  /* The number of pixels to draw */
 			    Pixel *pixel ) {
-
+  int minx = 100000, miny = 1000000, maxx = 0, maxy = 0;
   int i;
-  for( i = 0 ; i < n ; i++ ) {
-    sdl_visual_put_pixel(vwk,
-			 pixel[i].x,
-			 pixel[i].y,
-			 pixel[i].color);
+  
+  Uint32        color;
+  SDL_Surface * screen;
+  
+  screen = VISUAL_T(vwk->visual->private);
+  
+  sdl_visual_lock(screen);
+  
+  if( WRITE_MODE(vwk->visual->private) == MD_XOR ) {
+    printf("bpp = %d\n", screen->format->BytesPerPixel);
   }
+  
+  for( i = 0 ; i < n ; i++ ) {
+    color = PENS(vwk->visual->private)[pixel[i].color];
+    sdl_visual_internal_put_pixel(screen, pixel[i].x, pixel[i].y, color);
+    
+    if (minx > pixel[i].x)
+      minx = pixel[i].x;
+    if (miny > pixel[i].y)
+      miny = pixel[i].y;
+    if (maxx < pixel[i].x)
+      maxx = pixel[i].x;
+    if (maxy < pixel[i].y)
+      maxy = pixel[i].y;
+  }
+  
+  sdl_visual_unlock(screen);
+  
+  if (minx < maxx && miny < maxy)
+    SDL_UpdateRect(screen, minx, miny, maxx-minx+1, maxy-miny+1);
 }
 
 
@@ -166,13 +211,8 @@ sdl_visual_hline(VWKREF vwk,
   color = PENS(vwk->visual->private)[c];
   /*  printf("color = 0x%x\n", color);*/
 
-  if(SDL_MUSTLOCK(screen))
-  {
-    if(SDL_LockSurface(screen) < 0)
-    {
-      return;
-    }
-  }
+  if (sdl_visual_lock(screen))
+    return;
 
   if(x1 < x2)
   {
@@ -192,12 +232,9 @@ sdl_visual_hline(VWKREF vwk,
 
   SDL_FillRect(screen, &area, color);
 
-  if(SDL_MUSTLOCK(screen))
-  {
-    SDL_UnlockSurface(screen);
-  }
-
-  SDL_UpdateRect(screen, xmin, y, xmax - xmin + 1, 1);
+  sdl_visual_unlock(screen);
+  
+  SDL_UpdateRect(screen, xmin, y, xmax-xmin+1, 1);
 
   DEBUG3("sdl_visual_hline exited\n");
 }
@@ -216,8 +253,16 @@ sdl_visual_line(VWKREF vwk,
 {
   int16_t x, y, xend, yend, dx, dy, c1, c2, p;
   int16_t step;
-
+  Uint32        color;
+  SDL_Surface * screen;
+  
   DEBUG3("sdl_visual_line entered\n");
+
+  screen = VISUAL_T(vwk->visual->private);
+  
+  sdl_visual_lock(screen);
+
+  color = PENS(vwk->visual->private)[col];
 
   dx = abs(a2-a1);
   dy = abs(b2-b1);
@@ -237,7 +282,7 @@ sdl_visual_line(VWKREF vwk,
     c1 = 2*dy;
     c2 = 2*(dy-dx);
     
-    sdl_visual_put_pixel(vwk, x, y, col);
+    sdl_visual_internal_put_pixel(screen, x, y, color);
     while (x < xend) {
       x++;
       if (p < 0) {
@@ -246,7 +291,7 @@ sdl_visual_line(VWKREF vwk,
         y += step;
         p += c2;
       }
-      sdl_visual_put_pixel(vwk, x, y, col);
+      sdl_visual_internal_put_pixel(screen, x, y, color);
     }
   } else { /* slope > 1 => step in y direction */
     y = MIN(b1,b2);
@@ -263,7 +308,7 @@ sdl_visual_line(VWKREF vwk,
     c1 = 2*dx;
     c2 = 2*(dx-dy);
     
-    sdl_visual_put_pixel(vwk, x, y, col);
+    sdl_visual_internal_put_pixel(screen, x, y, color);
     while (y < yend) {
       y++;
       if (p < 0) {
@@ -272,8 +317,18 @@ sdl_visual_line(VWKREF vwk,
         x += step;
         p += c2;
       }
-      sdl_visual_put_pixel(vwk, x, y, col);
+      sdl_visual_internal_put_pixel(screen, x, y, color);
     }
   }
+
+  x = MIN(a1,a2);
+  xend = MAX(a1,a2);
+  y = MIN(b1,b2);
+  yend = MAX(b1,b2);
+
+  sdl_visual_unlock(screen);
+  
+  SDL_UpdateRect(screen, x, y, xend-x+1, yend-y+1);
+
   DEBUG3("sdl_visual_line exited\n");
 }
