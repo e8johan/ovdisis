@@ -42,9 +42,12 @@ sdl_visual_save_mouse_bg(void * fb,
   x_last = x;
   y_last = y;
   
-  stride = 16*screen->format->BytesPerPixel;
+  if (x < screen->w-16)
+    stride = 16*screen->format->BytesPerPixel;
+  else
+    stride = (screen->w-x)*screen->format->BytesPerPixel;
   
-  for(iy = 0; iy<16; iy++)
+  for(iy = 0; iy<16 && iy+y<screen->h; iy++)
   {
     pixel = (unsigned char*)(screen->pixels + (iy+y)*screen->pitch + x*screen->format->BytesPerPixel);
     memcpy(ptr, pixel, stride);
@@ -75,9 +78,12 @@ sdl_visual_restore_mouse_bg(void * fb)
     }
   }
 
-  stride = 16*screen->format->BytesPerPixel;
+  if (x_last < screen->w-16)
+    stride = 16*screen->format->BytesPerPixel;
+  else
+    stride = (screen->w-x_last)*screen->format->BytesPerPixel;
   
-  for(iy = 0; iy<16; iy++)
+  for(iy = 0; iy<16 && iy+y_last<screen->h; iy++)
   {
     pixel = (unsigned char*)(screen->pixels + (iy+y_last)*screen->pitch + x_last*screen->format->BytesPerPixel);
     memcpy(pixel, ptr, stride);
@@ -89,5 +95,5 @@ sdl_visual_restore_mouse_bg(void * fb)
     SDL_UnlockSurface(screen);
   }
 
-  SDL_UpdateRect(screen, x_last, y_last, 16, 16);
+  SDL_UpdateRect(screen, x_last, y_last, (x_last+16>screen->w)?(screen->w-x_last):16, (y_last+16>screen->h)?(screen->h-y_last):16);
 }
