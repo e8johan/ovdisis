@@ -8,7 +8,8 @@ SDL_VISUAL_SOURCES = \
 	sdl_visual_mouse.c sdl_visual_mouse.h \
 	sdl_visual_mutex.c sdl_visual_mutex.h \
 	sdl_visual_text.c sdl_visual_text.h \
-	sdl_visual_various.c sdl_visual_various.h
+	sdl_visual_various.c sdl_visual_various.h \
+	sdl_visual_internal.c sdl_visual_internal.h
 
 INCLUDES = -I../..
 LIBS = 

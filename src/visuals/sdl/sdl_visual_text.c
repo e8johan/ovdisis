@@ -17,6 +17,7 @@
 #include "ovdisis.h"
 #include "sdl_visual_text.h"
 #include "sdl_visual_various.h"
+#include "sdl_visual_internal.h"
 
 extern int  fontheight_system_8x16;
 extern int  fontwidth_system_8x16;
@@ -38,6 +39,17 @@ sdl_visual_put_char (VWKREF vwk,
   register unsigned char * chardata = &set_chardata[set_charheight * ch];
   register unsigned char   data;
   register char            light = vwk->text_a.effects & LIGHT;
+  Uint32        color;
+  SDL_Surface * screen;
+
+  screen = VISUAL_T(vwk->visual->private);
+
+  /* printf("c = %d ", c);*/
+  color = PENS(vwk->visual->private)[fgcol];
+  /*  printf("color = 0x%x\n", color);*/
+
+  if (sdl_visual_internal_lock(screen))
+    return;  
 
   for (oy = 0; oy < set_charheight; oy++)
   {
@@ -63,12 +75,16 @@ sdl_visual_put_char (VWKREF vwk,
     {
       if (data & 0x80)
       {
-        sdl_visual_put_pixel(vwk, x + ox, y + oy, fgcol);
+        sdl_visual_internal_put_pixel(screen, x + ox, y + oy, color);
       }
 
       data <<= 1;
     }
   }
+  
+  sdl_visual_internal_unlock(screen);
+  
+  SDL_UpdateRect(screen, x, y, set_charwidth, set_charheight);
 }
 
 

@@ -17,6 +17,7 @@
 #include "ovdisis.h"
 #include "sdl_visual.h"
 #include "sdl_visual_various.h"
+#include "sdl_visual_internal.h"
 
 void
 sdl_visual_inquire(void *        vis,
@@ -40,85 +41,6 @@ sdl_visual_get_pixel (VWKREF vwk,
   return 0;
 }
 
-/* internal */
-int
-sdl_visual_lock(SDL_Surface *screen)
-{
-  if(SDL_MUSTLOCK(screen))
-  {
-    if(SDL_LockSurface(screen) < 0)
-    {
-      return -1;
-    }
-  }
-  
-  return 0;
-}
-
-/* internal */
-void
-sdl_visual_unlock(SDL_Surface *screen)
-{
-  if(SDL_MUSTLOCK(screen))
-  {
-    SDL_UnlockSurface(screen);
-  }
-}
-
-/* internal */
-void
-sdl_visual_internal_put_pixel(SDL_Surface *screen, int x, int y, Uint32 color)
-{
-  switch(screen->format->BytesPerPixel)
-  {
-  case 1: /* Assuming 8-bpp */
-  {
-    Uint8 *bufp;
-    
-    bufp = (Uint8 *)screen->pixels + y*screen->pitch + x;
-    *bufp = color;
-  }
-  break;
-  
-  case 2: /* Probably 15-bpp or 16-bpp */
-  {
-    Uint16 * bufp;
-    
-    bufp = (Uint16 *)screen->pixels + y*screen->pitch/2 + x;
-    *bufp = color;
-  }
-  break;
-  
-  case 3: /* Slow 24-bpp mode, usually not used */
-  {
-    Uint8 * bufp;
-    
-    bufp = (Uint8 *)screen->pixels + y*screen->pitch + x * 3;
-    if(SDL_BYTEORDER == SDL_LIL_ENDIAN)
-    {
-      bufp[0] = color;
-      bufp[1] = color >> 8;
-      bufp[2] = color >> 16;
-    }
-    else
-    {
-      bufp[2] = color;
-      bufp[1] = color >> 8;
-      bufp[0] = color >> 16;
-    }
-  }
-  break;
-  
-  case 4: /* Probably 32-bpp */
-  {
-    Uint32 *bufp;
-    
-    bufp = (Uint32 *)screen->pixels + y*screen->pitch/4 + x;
-    *bufp = color;
-  }
-  break;
-  }
-}
 
 void
 sdl_visual_put_pixel(VWKREF vwk,
@@ -137,7 +59,7 @@ sdl_visual_put_pixel(VWKREF vwk,
   color = PENS(vwk->visual->private)[c];
   /*  printf("color = 0x%x\n", color);*/
 
-  if (sdl_visual_lock(screen))
+  if (sdl_visual_internal_lock(screen))
     return;
   
   if( WRITE_MODE(vwk->visual->private) == MD_XOR ) {
@@ -146,7 +68,7 @@ sdl_visual_put_pixel(VWKREF vwk,
   
   sdl_visual_internal_put_pixel(screen, x, y, color);
 
-  sdl_visual_unlock(screen);
+  sdl_visual_internal_unlock(screen);
 
   SDL_UpdateRect(screen, x, y, 1, 1);
   DEBUG3("sdl_visual_put_pixel exited\n");
@@ -163,7 +85,7 @@ void sdl_visual_put_pixels( VWKREF vwk, int n,  /* The number of pixels to draw 
   
   screen = VISUAL_T(vwk->visual->private);
   
-  sdl_visual_lock(screen);
+  sdl_visual_internal_lock(screen);
   
   if( WRITE_MODE(vwk->visual->private) == MD_XOR ) {
     printf("bpp = %d\n", screen->format->BytesPerPixel);
@@ -183,7 +105,7 @@ void sdl_visual_put_pixels( VWKREF vwk, int n,  /* The number of pixels to draw 
       maxy = pixel[i].y;
   }
   
-  sdl_visual_unlock(screen);
+  sdl_visual_internal_unlock(screen);
   
   if (minx < maxx && miny < maxy)
     SDL_UpdateRect(screen, minx, miny, maxx-minx+1, maxy-miny+1);
@@ -211,7 +133,7 @@ sdl_visual_hline(VWKREF vwk,
   color = PENS(vwk->visual->private)[c];
   /*  printf("color = 0x%x\n", color);*/
 
-  if (sdl_visual_lock(screen))
+  if (sdl_visual_internal_lock(screen))
     return;
 
   if(x1 < x2)
@@ -232,7 +154,7 @@ sdl_visual_hline(VWKREF vwk,
 
   SDL_FillRect(screen, &area, color);
 
-  sdl_visual_unlock(screen);
+  sdl_visual_internal_unlock(screen);
   
   SDL_UpdateRect(screen, xmin, y, xmax-xmin+1, 1);
 
@@ -260,7 +182,7 @@ sdl_visual_line(VWKREF vwk,
 
   screen = VISUAL_T(vwk->visual->private);
   
-  sdl_visual_lock(screen);
+  sdl_visual_internal_lock(screen);
 
   color = PENS(vwk->visual->private)[col];
 
@@ -326,7 +248,7 @@ sdl_visual_line(VWKREF vwk,
   y = MIN(b1,b2);
   yend = MAX(b1,b2);
 
-  sdl_visual_unlock(screen);
+  sdl_visual_internal_unlock(screen);
   
   SDL_UpdateRect(screen, x, y, xend-x+1, yend-y+1);
 
